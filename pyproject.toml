@@ -1,7 +1,7 @@
 [project]
 name = "abkit"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fast antibody repertoire analysis and CDR3 clustering."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
