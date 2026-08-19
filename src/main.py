@@ -33,7 +33,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "-m",
         "--min-cluster-size",
-        required=True,
+        required=False,
         default=5,
         type=int,
         help="Minimum cluster size for HDBSCAN.",
@@ -50,18 +50,46 @@ def check_file_exist(filepath: str) -> str:
 
 
 def load_data(input_path: Path) -> pl.DataFrame:
-    return (
-        pl.scan_csv(input_path, separator="\t")
-        .select(["productive", "cdr3_aa"])
-        .filter(
-            pl.col("productive").cast(pl.String).is_in(["T", "True"])
-            & pl.col("cdr3_aa").is_not_null()
-            & ~pl.col("cdr3_aa").str.contains("r\*")
+    # peak at schema to handle columns
+    schema = pl.scan_csv(input_path, separator="\t").collect_schema().names()
+
+    cdr3_col = "cdr3_aa" if "cdr3_aa" in schema else "junction_aa"
+    if cdr3_col not in schema:
+        raise ValueError(
+            f"Input file must contain 'cdr3_aa' or 'junction_aa'. Found: {schema}"
         )
-        .group_by("cdr3_aa")
-        .agg(pl.len().alias("hcdr3_count"))
-        .collect(engine="streaming")
+
+    has_productive = "productive" in schema
+    cols_to_select = [cdr3_col, "productive"] if has_productive else [cdr3_col]
+    query = pl.scan_csv(input_path, separator="\t").select(cols_to_select)
+
+    if has_productive:
+        query = query.filter(
+            pl.col("productive")
+            .cast(pl.String)
+            .str.to_uppercase()
+            .is_in(["T", "TRUE", "1"])
+        )
+
+    # filtering out stops, ambiguous, missing entries, and short strings
+    query = (
+        query.filter(
+            pl.col(cdr3_col).is_not_null()
+            & (pl.col(cdr3_col).str.len_chars() >= 3)
+            & ~pl.col(cdr3_col).str.contains(r"[\*\_\#\s]")
+        )
+        .group_by(pl.col(cdr3_col).alias("cdr3_aa"))
+        .agg(pl.len().alias("read_count"))
     )
+
+    df = query.collect(engine="streaming")
+
+    if df.height == 0:
+        raise ValueError(
+                "No valid productive CDR3 sequences found after filtering"
+        )
+
+    return df
 
 
 def main() -> None:
