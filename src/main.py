@@ -8,7 +8,6 @@ import polars as pl
 from hdbscan import HDBSCAN
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 
 def get_args() -> argparse.Namespace:
@@ -133,22 +132,22 @@ def cluster_cdr3(
         pl.int_range(0, df.height).alias("row_idx"),
     )
 
-    medoid_row_indices = []
-    unique_cids = [
-        cid
-        for cid in df["cluster_id"].unique().to_list()
-        if cid != -1 and cid is not None
-    ]
+    clustered_groups = (
+        df.filter((pl.col("cluster_id") != -1) & pl.col("cluster_id").is_not_null())
+        .group_by("cluster_id")
+        .agg(pl.col("row_idx"))
+    )
 
-    for cid in unique_cids:
-        indices = df.filter(pl.col("cluster_id") == cid)["row_idx"].to_numpy()
+    medoid_row_indices = []
+    for row in clustered_groups.iter_rows(named=True):
+        indices = np.asarray(row["row_idx"])
         if len(indices) == 1:
             medoid_row_indices.append(indices[0])
             continue
-        sub_matrix = X[indices]
-        sim_matrix = cosine_similarity(sub_matrix)
-        best_sub_idx = int(np.argmax(sim_matrix.sum(axis=1)))
-        medoid_row_indices.append(indices[best_sub_idx])
+        sub = X[indices]
+        centroid_sum = np.asarray(sub.sum(axis=0)).ravel()
+        medoid_local_idx = int(np.argmax(sub.dot(centroid_sum)))
+        medoid_row_indices.append(indices[medoid_local_idx])
 
     is_medoid = np.zeros(df.height, dtype=bool)
     if medoid_row_indices:
