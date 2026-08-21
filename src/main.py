@@ -2,7 +2,13 @@
 
 import argparse
 from pathlib import Path
+
+import numpy as np
 import polars as pl
+from hdbscan import HDBSCAN
+from scipy.sparse import csr_matrix
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 def get_args() -> argparse.Namespace:
@@ -32,7 +38,7 @@ def get_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-m",
-        "--min-cluster-size",
+        "--min_cluster_size",
         required=False,
         default=5,
         type=int,
@@ -50,9 +56,7 @@ def check_file_exist(filepath: str) -> str:
 
 
 def load_data(input_path: Path) -> pl.DataFrame:
-    # peak at schema to handle columns
     schema = pl.scan_csv(input_path, separator="\t").collect_schema().names()
-
     cdr3_col = "cdr3_aa" if "cdr3_aa" in schema else "junction_aa"
     if cdr3_col not in schema:
         raise ValueError(
@@ -60,7 +64,16 @@ def load_data(input_path: Path) -> pl.DataFrame:
         )
 
     has_productive = "productive" in schema
-    cols_to_select = [cdr3_col, "productive"] if has_productive else [cdr3_col]
+
+    count_cols = ["duplicate_count", "consensus_count", "read_count", "count"]
+    detected_count_col = next((c for c in count_cols if c in schema), None)
+
+    cols_to_select = [cdr3_col]
+    if has_productive:
+        cols_to_select.append("productive")
+    if detected_count_col:
+        cols_to_select.append(detected_count_col)
+
     query = pl.scan_csv(input_path, separator="\t").select(cols_to_select)
 
     if has_productive:
@@ -71,7 +84,12 @@ def load_data(input_path: Path) -> pl.DataFrame:
             .is_in(["T", "TRUE", "1"])
         )
 
-    # filtering out stops, ambiguous, missing entries, and short strings
+    agg_expr = (
+        pl.col(detected_count_col).cast(pl.UInt32).sum().alias("read_count")
+        if detected_count_col
+        else pl.len().alias("read_count")
+    )
+
     query = (
         query.filter(
             pl.col(cdr3_col).is_not_null()
@@ -79,17 +97,65 @@ def load_data(input_path: Path) -> pl.DataFrame:
             & ~pl.col(cdr3_col).str.contains(r"[\*\_\#\s]")
         )
         .group_by(pl.col(cdr3_col).alias("cdr3_aa"))
-        .agg(pl.len().alias("read_count"))
+        .agg(agg_expr)
     )
 
     df = query.collect(engine="streaming")
 
     if df.height == 0:
-        raise ValueError(
-                "No valid productive CDR3 sequences found after filtering"
-        )
+        raise ValueError("No valid productive CDR3 sequences found after filtering.")
 
     return df
+
+
+def cluster_cdr3(
+    df: pl.DataFrame, min_cluster_size: int
+) -> tuple[pl.DataFrame, csr_matrix]:
+    vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 3), norm="l2")
+    X: csr_matrix = vectorizer.fit_transform(df["cdr3_aa"].to_numpy())
+
+    if df.height < min_cluster_size:
+        print(
+            f"Warning: dataset size ({df.height}) is smaller than the min_cluster_size",
+            "Assigning all to noise",
+        )
+        cluster_ids = np.full(df.height, -1, dtype=int)
+    else:
+        clusterer = HDBSCAN(
+            min_cluster_size=min_cluster_size,
+            metric="euclidean",
+            cluster_selection_method="leaf",
+        )
+        cluster_ids = clusterer.fit_predict(X)
+
+    df = df.with_columns(
+        pl.Series("cluster_id", cluster_ids),
+        pl.int_range(0, df.height).alias("row_idx"),
+    )
+
+    medoid_row_indices = []
+    unique_cids = [
+        cid
+        for cid in df["cluster_id"].unique().to_list()
+        if cid != -1 and cid is not None
+    ]
+
+    for cid in unique_cids:
+        indices = df.filter(pl.col("cluster_id") == cid)["row_idx"].to_numpy()
+        if len(indices) == 1:
+            medoid_row_indices.append(indices[0])
+            continue
+        sub_matrix = X[indices]
+        sim_matrix = cosine_similarity(sub_matrix)
+        best_sub_idx = int(np.argmax(sim_matrix.sum(axis=1)))
+        medoid_row_indices.append(indices[best_sub_idx])
+
+    is_medoid = np.zeros(df.height, dtype=bool)
+    if medoid_row_indices:
+        is_medoid[medoid_row_indices] = True
+
+    df = df.with_columns(pl.Series("is_medoid", is_medoid)).drop("row_idx")
+    return df, X
 
 
 def main() -> None:
@@ -99,6 +165,11 @@ def main() -> None:
     # filtering report
     df = load_data(input_path)
     print(df.head(20))
+
+    df_clustered, X = cluster_cdr3(df, args.min_cluster_size)
+
+    df_clustered.write_csv(args.output_file, separator="\t")
+    print("Clusters generated")
 
 
 if __name__ == "__main__":

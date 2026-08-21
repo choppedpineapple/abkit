@@ -5,6 +5,7 @@ description = "Fast antibody repertoire analysis and CDR3 clustering."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "hdbscan>=0.8.44",
     "polars>=1.43.2",
     "scikit-learn>=1.9.0",
 ]
