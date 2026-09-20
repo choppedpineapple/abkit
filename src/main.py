@@ -29,13 +29,6 @@ def get_args() -> argparse.Namespace:
         help="Path to output clustered file.",
     )
     parser.add_argument(
-        "-p",
-        "--plot",
-        required=False,
-        default="clusters.pdf",
-        help="Path to the output clusters plot file.",
-    )
-    parser.add_argument(
         "-m",
         "--min_cluster_size",
         required=False,

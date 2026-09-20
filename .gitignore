@@ -8,3 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Outputs
+results/
+*output.tsv
+clusters.pdf
+mem.bin
