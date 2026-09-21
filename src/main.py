@@ -40,15 +40,18 @@ def get_args() -> argparse.Namespace:
 
 
 def check_file_exist(filepath: str) -> str:
-    try:
-        with open(filepath, "r") as _:
-            return filepath
-    except FileNotFoundError:
+    path = Path(filepath)
+    if not path.is_file():
         raise argparse.ArgumentTypeError(f"File {filepath!r} not found!")
+    if path.suffix.lower() not in (".tsv", ".csv"):
+        raise argparse.ArgumentTypeError(
+            f"Unsupported extension {path.suffix!r} (expected .tsv or .csv)"
+        )
+    return filepath
 
 
-def load_data(input_path: Path) -> pl.DataFrame:
-    schema = pl.scan_csv(input_path, separator="\t").collect_schema().names()
+def load_data(input_path: Path, delim: str) -> pl.DataFrame:
+    schema = pl.scan_csv(input_path, separator=delim).collect_schema().names()
     cdr3_col = "cdr3_aa" if "cdr3_aa" in schema else "junction_aa"
     if cdr3_col not in schema:
         raise ValueError(
@@ -66,7 +69,7 @@ def load_data(input_path: Path) -> pl.DataFrame:
     if detected_count_col:
         cols_to_select.append(detected_count_col)
 
-    query = pl.scan_csv(input_path, separator="\t").select(cols_to_select)
+    query = pl.scan_csv(input_path, separator=delim).select(cols_to_select)
 
     if has_productive:
         query = query.filter(
@@ -153,14 +156,15 @@ def cluster_cdr3(
 def main() -> None:
     args = get_args()
     input_path: Path = Path(args.input_file).resolve()
+    delim: str = "\t" if input_path.suffix.lower() == ".tsv" else ","
 
     # filtering report
-    df = load_data(input_path)
+    df = load_data(input_path, delim)
     print(df.head(20))
 
     df_clustered, X = cluster_cdr3(df, args.min_cluster_size)
 
-    df_clustered.write_csv(args.output_file, separator="\t")
+    df_clustered.write_csv(args.output_file, separator=delim)
     print("Clusters generated")
 
 
