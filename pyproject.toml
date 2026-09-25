@@ -3,17 +3,27 @@ name = "abkit"
 version = "0.1.0"
 description = "Fast antibody repertoire analysis and CDR3 clustering."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "hdbscan>=0.8.44",
+    "numpy>=2.5.2",
     "polars>=1.43.2",
-    "pytest>=9.1.1",
     "scikit-learn>=1.9.0",
+    "scipy>=1.18.0",
 ]
+
+[project.scripts]
+abkit = "abkit.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 
 [dependency-groups]
 dev = [
     "memray>=1.20.0",
+    "pytest>=9.1.1",
 ]

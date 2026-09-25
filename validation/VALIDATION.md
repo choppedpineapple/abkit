@@ -20,7 +20,7 @@ well. Under those two conditions the two methods are mathematically the same
 calculation, so they cannot disagree.
 
 The normalisation comes from `norm="l2"` in the TF-IDF vectoriser in
-`src/main.py`. If that is ever changed, the guarantee below no longer holds
+`src/abkit/cluster.py`. If that is ever changed, the guarantee below no longer holds
 and nothing will warn you.
 
 ## How it was tested
@@ -84,16 +84,20 @@ distance measurement reflects sequence counts, so the two stop agreeing.
 
 | Minority group | Agreement | Median ratio | Worst ratio |
 |---|---|---|---|
-| 0%  | 20% | 1.046 | 1.108 |
-| 10% | 10% | 1.035 | 1.089 |
-| 20% |  0% | 1.025 | 1.075 |
-| 30% |  0% | 1.019 | 1.053 |
-| 40% |  5% | 1.020 | 1.049 |
-| 50% | 10% | 1.023 | 1.500 |
+| 0%  | 95% | 1.000 | 1.001 |
+| 10% | 85% | 1.000 | 1.003 |
+| 20% | 95% | 1.000 | 1.001 |
+| 30% | 85% | 1.000 | 1.007 |
+| 40% | 75% | 1.000 | 1.012 |
+| 50% | 60% | 1.000 | 1.007 |
 
-Fails differently. Agreement is poor across the board, but the picks are only
-slightly worse — usually 2–5% off rather than catastrophically wrong. The
-equivalence simply doesn't hold for this distance measure.
+Close, but not exact. The two methods usually agree, and when they don't, the
+fast method's pick is within about 1% of the best possible one. Agreement drops
+as clusters become more lopsided.
+
+With Euclidean distance, the sequence closest to the cluster's average is not
+always the one closest to every other sequence, so the shortcut becomes an
+approximation. It is only guaranteed to be exact with cosine distance.
 
 ## What this means in practice
 

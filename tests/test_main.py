@@ -2,7 +2,8 @@
 
 from pathlib import Path
 import polars as pl
-from src.main import cluster_cdr3, load_data
+from abkit.cluster import cluster_cdr3
+from abkit.io import load_data
 
 SAMPLE_PATH = Path("data/sample_airr.tsv")
 

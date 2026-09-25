@@ -11,7 +11,7 @@ and **HDBSCAN**.
 ## Features
 
 - **Fast ingestion** — streaming, validation and read-count aggregation of
-  AIRR-compliant TSVs via Polars.
+  AIRR-compliant TSVs or CSVs via Polars.
 - **Sparse feature extraction** — amino acid k-mer TF-IDF representation
   without dense matrix memory overhead.
 - **Density-based clustering** — HDBSCAN, which handles varying clonal
@@ -37,12 +37,12 @@ uv sync
 ## Usage
 
 ```bash
-uv run python src/main.py -i data/sample_airr.tsv
+uv run abkit cluster -i data/sample_airr.tsv
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `-i`, `--input_file` | required | IgBLAST AIRR report (TSV) |
+| `-i`, `--input_file` | required | IgBLAST AIRR report (TSV or CSV) |
 | `-o`, `--output_file` | `clustered_output.tsv` | Output path |
 | `-m`, `--min_cluster_size` | `5` | Minimum cluster size for HDBSCAN |
 
