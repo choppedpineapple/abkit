@@ -1,5 +1,7 @@
 # abkit
 
+![checks](https://github.com/choppedpineapple/abkit/actions/workflows/checks.yml/badge.svg)
+
 > Fast antibody repertoire analysis and CDR3 sequence clustering.
 
 `abkit` is a toolkit for AIRR-seq repertoire clustering and representative
