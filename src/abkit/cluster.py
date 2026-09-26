@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from hdbscan import HDBSCAN
 import numpy as np
 import polars as pl
+from hdbscan import HDBSCAN
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
 
